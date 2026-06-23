@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>群发消息</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+body { background: #f5f6f8; }
+.list-group-item {
+    border-left: 3px solid transparent;
+    transition: all 0.2s;
+}
+.list-group-item:hover {
+    background-color: #f8f9fa;
+    border-left-color: #0d6efd;
+}
+.form-check-input:checked ~ .form-check-label {
+    font-weight: 600;
+}
+#progress-details {
+    font-family: monospace;
+}
+.progress {
+    height: 25px;
+}
+.progress-bar {
+    font-size: 14px;
+    font-weight: 600;
+}
+.badge.bg-info {
+    font-size: 0.75rem;
+    padding: 0.25em 0.6em;
+    font-weight: normal;
+}
+.form-check-label strong:hover {
+    color: #0d6efd;
+}
+</style>
+</head>
+<body>
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-broadcast me-2"></i>群发消息</h5>
+                    <button class="btn btn-primary btn-sm" onclick="fetchIds()">
+                        <i class="bi bi-download"></i> 获取可用ID
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- ID列表区域 -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-people-fill"></i> 群聊列表 (<span id="group-count">0</span>)</span>
+                                    <div>
+                                        <button class="btn btn-sm btn-light" onclick="selectAllGroups()">全选</button>
+                                        <button class="btn btn-sm btn-light" onclick="clearAllGroups()">清空</button>
+                                    </div>
+                                </div>
+                                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                    <div id="group-list" class="list-group">
+                                        <div class="text-muted text-center p-3">点击"获取可用ID"按钮加载群聊列表</div>
+                                    </div>
+                                </div>
+                                <div class="card-footer text-muted small">
+                                    <i class="bi bi-info-circle"></i> 点击ID可编辑备注
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-person-fill"></i> 私聊列表 (<span id="user-count">0</span>)</span>
+                                    <div>
+                                        <button class="btn btn-sm btn-light" onclick="selectAllUsers()">全选</button>
+                                        <button class="btn btn-sm btn-light" onclick="clearAllUsers()">清空</button>
+                                    </div>
+                                </div>
+                                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                    <div id="user-list" class="list-group">
+                                        <div class="text-muted text-center p-3">点击"获取可用ID"按钮加载私聊列表</div>
+                                    </div>
+                                </div>
+                                <div class="card-footer text-muted small">
+                                    <i class="bi bi-info-circle"></i> 点击ID可编辑备注
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 消息编辑区域 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-info text-white">
+                            <i class="bi bi-pencil-square"></i> 消息内容
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">发送方式</label>
+                                <select class="form-select" id="send-method" onchange="updateSendMethodUI()">
+                                    <option value="text">普通文本</option>
+                                    <option value="markdown">Markdown</option>
+                                    <option value="template_markdown">模板Markdown</option>
+                                    <option value="image">图片消息</option>
+                                    <option value="voice">语音消息</option>
+                                    <option value="video">视频消息</option>
+                                    <option value="ark">ARK卡片</option>
+                                </select>
+                            </div>
+
+                            <!-- 文本/Markdown内容 -->
+                            <div id="text-content-group">
+                                <label class="form-label">消息内容</label>
+                                <textarea class="form-control" id="message-content" rows="6" placeholder="请输入要群发的消息内容"></textarea>
+                            </div>
+
+                            <!-- 模板Markdown -->
+                            <div id="template-markdown-group" style="display: none;">
+                                <div class="mb-3">
+                                    <label class="form-label">模板ID</label>
+                                    <input type="text" class="form-control" id="template-id" placeholder="例如: 102321943_1752737844">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">模板参数（每行一个）</label>
+                                    <textarea class="form-control" id="template-params" rows="4" placeholder="参数1&#10;参数2&#10;参数3"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">按钮ID（可选）</label>
+                                    <input type="text" class="form-control" id="keyboard-id" placeholder="例如: 102321943_1752737844">
+                                </div>
+                            </div>
+
+                            <!-- 图片消息 -->
+                            <div id="image-group" style="display: none;">
+                                <div class="mb-3">
+                                    <label class="form-label">图片URL</label>
+                                    <input type="text" class="form-control" id="image-url" placeholder="https://example.com/image.jpg">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">图片描述（可选）</label>
+                                    <input type="text" class="form-control" id="image-text" placeholder="图片描述文本">
+                                </div>
+                            </div>
+
+                            <!-- 语音消息 -->
+                            <div id="voice-group" style="display: none;">
+                                <label class="form-label">语音URL</label>
+                                <input type="text" class="form-control" id="voice-url" placeholder="https://example.com/voice.mp3">
+                            </div>
+
+                            <!-- 视频消息 -->
+                            <div id="video-group" style="display: none;">
+                                <label class="form-label">视频URL</label>
+                                <input type="text" class="form-control" id="video-url" placeholder="https://example.com/video.mp4">
+                            </div>
+
+                            <!-- ARK卡片 -->
+                            <div id="ark-group" style="display: none;">
+                                <div class="mb-3">
+                                    <label class="form-label">ARK类型</label>
+                                    <select class="form-select" id="ark-type">
+                                        <option value="23">列表卡片 (23)</option>
+                                        <option value="24">信息卡片 (24)</option>
+                                        <option value="37">通知卡片 (37)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">ARK参数（每行一个，数组用括号）</label>
+                                    <textarea class="form-control" id="ark-params" rows="4" placeholder="参数1&#10;参数2&#10;(项1,链接1)&#10;(项2,链接2)"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="alert alert-warning mt-3">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                <strong>注意：</strong>群发功能会向所有选中的ID发送消息，请谨慎使用！
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 发送按钮 -->
+                    <div class="text-end">
+                        <button class="btn btn-lg btn-success" onclick="sendBroadcast()">
+                            <i class="bi bi-send-fill"></i> 开始群发
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 发送进度模态框 -->
+<div class="modal fade" id="progressModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">群发进度</h5>
+            </div>
+            <div class="modal-body">
+                <div class="progress mb-3">
+                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <div id="progress-text" class="text-center">准备发送...</div>
+                <div id="progress-details" class="mt-3" style="max-height: 200px; overflow-y: auto; font-size: 0.9rem;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="close-progress-btn" disabled>关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let groupIds = [];
+let userIds = [];
+let progressModal = null;
+
+// 读取面板传入的鉴权 token (iframe URL 上的 ?token=)
+const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+const API = (path) => `/api/ext/broadcast/${path}?token=${encodeURIComponent(TOKEN)}`;
+
+// 初始化模态框
+setTimeout(function() {
+    const progressModalEl = document.getElementById('progressModal');
+    if (progressModalEl) {
+        progressModal = new bootstrap.Modal(progressModalEl);
+    }
+}, 100);
+
+function fetchIds() {
+    showLoading();
+
+    fetch(API('get_ids'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            groupIds = data.data.groups || [];
+            userIds = data.data.users || [];
+
+            renderGroupList();
+            renderUserList();
+
+            showSuccess(`成功获取 ${groupIds.length} 个群聊和 ${userIds.length} 个私聊`);
+        } else {
+            showError('获取ID失败: ' + data.message);
+        }
+    })
+    .catch(error => {
+        showError('网络错误: ' + error.message);
+    });
+}
+
+function renderGroupList() {
+    const listDiv = document.getElementById('group-list');
+    document.getElementById('group-count').textContent = groupIds.length;
+
+    if (groupIds.length === 0) {
+        listDiv.innerHTML = '<div class="text-muted text-center p-3">暂无可用的群聊ID</div>';
+        return;
+    }
+
+    let html = '';
+    groupIds.forEach((item, index) => {
+        const timeStr = new Date(item.last_time).toLocaleString('zh-CN');
+        const remark = item.remark || '';
+        const remarkDisplay = remark ? `<span class="badge bg-info ms-2">${remark}</span>` : '';
+
+        html += `
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div class="form-check flex-grow-1">
+                    <input class="form-check-input group-checkbox" type="checkbox" value="${index}" id="group-${index}" checked>
+                    <label class="form-check-label" for="group-${index}">
+                        <strong onclick="editRemark('group', ${index})" style="cursor: pointer; text-decoration: underline;" title="点击编辑备注">${item.chat_id}</strong>
+                        ${remarkDisplay}
+                        <br><small class="text-muted">最后消息: ${timeStr}</small>
+                    </label>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="removeGroup(${index})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+    });
+    listDiv.innerHTML = html;
+}
+
+function renderUserList() {
+    const listDiv = document.getElementById('user-list');
+    document.getElementById('user-count').textContent = userIds.length;
+
+    if (userIds.length === 0) {
+        listDiv.innerHTML = '<div class="text-muted text-center p-3">暂无可用的私聊ID</div>';
+        return;
+    }
+
+    let html = '';
+    userIds.forEach((item, index) => {
+        const timeStr = new Date(item.last_time).toLocaleString('zh-CN');
+        const remark = item.remark || '';
+        const remarkDisplay = remark ? `<span class="badge bg-info ms-2">${remark}</span>` : '';
+
+        html += `
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div class="form-check flex-grow-1">
+                    <input class="form-check-input user-checkbox" type="checkbox" value="${index}" id="user-${index}" checked>
+                    <label class="form-check-label" for="user-${index}">
+                        <strong onclick="editRemark('user', ${index})" style="cursor: pointer; text-decoration: underline;" title="点击编辑备注">${item.chat_id}</strong>
+                        ${remarkDisplay}
+                        <br><small class="text-muted">最后消息: ${timeStr}</small>
+                    </label>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="removeUser(${index})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+    });
+    listDiv.innerHTML = html;
+}
+
+function removeGroup(index) {
+    if (confirm('确定要删除这个群聊ID吗？')) {
+        const chatId = groupIds[index].chat_id;
+        deleteIdFromDB('group', chatId, () => {
+            groupIds.splice(index, 1);
+            renderGroupList();
+            showSuccess('已删除群聊ID');
+        });
+    }
+}
+
+function removeUser(index) {
+    if (confirm('确定要删除这个私聊ID吗？')) {
+        const chatId = userIds[index].chat_id;
+        deleteIdFromDB('user', chatId, () => {
+            userIds.splice(index, 1);
+            renderUserList();
+            showSuccess('已删除私聊ID');
+        });
+    }
+}
+
+function deleteIdFromDB(chatType, chatId, callback) {
+    fetch(API('delete_id'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            chat_type: chatType,
+            chat_id: chatId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            callback();
+        } else {
+            showError('删除失败: ' + data.message);
+        }
+    })
+    .catch(error => {
+        showError('网络错误: ' + error.message);
+    });
+}
+
+function selectAllGroups() {
+    document.querySelectorAll('.group-checkbox').forEach(cb => cb.checked = true);
+}
+
+function clearAllGroups() {
+    document.querySelectorAll('.group-checkbox').forEach(cb => cb.checked = false);
+}
+
+function selectAllUsers() {
+    document.querySelectorAll('.user-checkbox').forEach(cb => cb.checked = true);
+}
+
+function clearAllUsers() {
+    document.querySelectorAll('.user-checkbox').forEach(cb => cb.checked = false);
+}
+
+function updateSendMethodUI() {
+    const method = document.getElementById('send-method').value;
+
+    document.getElementById('text-content-group').style.display = 'none';
+    document.getElementById('template-markdown-group').style.display = 'none';
+    document.getElementById('image-group').style.display = 'none';
+    document.getElementById('voice-group').style.display = 'none';
+    document.getElementById('video-group').style.display = 'none';
+    document.getElementById('ark-group').style.display = 'none';
+
+    if (method === 'text' || method === 'markdown') {
+        document.getElementById('text-content-group').style.display = 'block';
+    } else if (method === 'template_markdown') {
+        document.getElementById('template-markdown-group').style.display = 'block';
+    } else if (method === 'image') {
+        document.getElementById('image-group').style.display = 'block';
+    } else if (method === 'voice') {
+        document.getElementById('voice-group').style.display = 'block';
+    } else if (method === 'video') {
+        document.getElementById('video-group').style.display = 'block';
+    } else if (method === 'ark') {
+        document.getElementById('ark-group').style.display = 'block';
+    }
+}
+
+function sendBroadcast() {
+    const selectedGroups = [];
+    const selectedUsers = [];
+
+    document.querySelectorAll('.group-checkbox:checked').forEach(cb => {
+        selectedGroups.push(groupIds[parseInt(cb.value)]);
+    });
+
+    document.querySelectorAll('.user-checkbox:checked').forEach(cb => {
+        selectedUsers.push(userIds[parseInt(cb.value)]);
+    });
+
+    const totalCount = selectedGroups.length + selectedUsers.length;
+
+    if (totalCount === 0) {
+        showError('请至少选择一个群聊或私聊');
+        return;
+    }
+
+    if (!confirm(`确定要向 ${selectedGroups.length} 个群聊和 ${selectedUsers.length} 个私聊发送消息吗？`)) {
+        return;
+    }
+
+    const sendMethod = document.getElementById('send-method').value;
+    const sendData = {
+        send_method: sendMethod,
+        groups: selectedGroups,
+        users: selectedUsers
+    };
+
+    if (sendMethod === 'text' || sendMethod === 'markdown') {
+        const content = document.getElementById('message-content').value.trim();
+        if (!content) {
+            showError('请输入消息内容');
+            return;
+        }
+        sendData.content = content;
+    } else if (sendMethod === 'template_markdown') {
+        const template = document.getElementById('template-id').value.trim();
+        const paramsText = document.getElementById('template-params').value.trim();
+        if (!template || !paramsText) {
+            showError('请输入模板ID和参数');
+            return;
+        }
+        sendData.template = template;
+        sendData.params = paramsText.split('\n').map(p => p.trim()).filter(p => p);
+        sendData.keyboard_id = document.getElementById('keyboard-id').value.trim();
+    } else if (sendMethod === 'image') {
+        const imageUrl = document.getElementById('image-url').value.trim();
+        if (!imageUrl) {
+            showError('请输入图片URL');
+            return;
+        }
+        sendData.image_url = imageUrl;
+        sendData.image_text = document.getElementById('image-text').value.trim();
+    } else if (sendMethod === 'voice') {
+        const voiceUrl = document.getElementById('voice-url').value.trim();
+        if (!voiceUrl) {
+            showError('请输入语音URL');
+            return;
+        }
+        sendData.voice_url = voiceUrl;
+    } else if (sendMethod === 'video') {
+        const videoUrl = document.getElementById('video-url').value.trim();
+        if (!videoUrl) {
+            showError('请输入视频URL');
+            return;
+        }
+        sendData.video_url = videoUrl;
+    } else if (sendMethod === 'ark') {
+        const arkType = document.getElementById('ark-type').value;
+        const paramsText = document.getElementById('ark-params').value.trim();
+        if (!paramsText) {
+            showError('请输入ARK参数');
+            return;
+        }
+        sendData.ark_type = arkType;
+        sendData.ark_params = paramsText.split('\n').map(p => p.trim()).filter(p => p);
+    }
+
+    if (progressModal) {
+        progressModal.show();
+    }
+    document.getElementById('close-progress-btn').disabled = true;
+    document.getElementById('progress-bar').style.width = '0%';
+    document.getElementById('progress-bar').textContent = '0%';
+    document.getElementById('progress-text').textContent = '正在发送...';
+    document.getElementById('progress-details').innerHTML = '';
+
+    fetch(API('send'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(sendData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const result = data.data;
+            const successCount = result.success_count || 0;
+            const failCount = result.fail_count || 0;
+            const total = result.total || 0;
+
+            const percentage = total ? Math.round((successCount + failCount) / total * 100) : 100;
+            document.getElementById('progress-bar').style.width = percentage + '%';
+            document.getElementById('progress-bar').textContent = percentage + '%';
+            document.getElementById('progress-text').textContent =
+                `发送完成！成功: ${successCount}, 失败: ${failCount}`;
+
+            let detailsHtml = '<div class="alert alert-info">详细结果：</div>';
+            if (result.results) {
+                result.results.forEach(r => {
+                    const statusClass = r.success ? 'text-success' : 'text-danger';
+                    const statusIcon = r.success ? '✓' : '✗';
+                    detailsHtml += `<div class="${statusClass}">${statusIcon} ${r.chat_type === 'group' ? '群聊' : '私聊'}: ${r.chat_id} - ${r.message}</div>`;
+                });
+            }
+            document.getElementById('progress-details').innerHTML = detailsHtml;
+
+            document.getElementById('close-progress-btn').disabled = false;
+
+            if (failCount === 0) {
+                showSuccess('群发完成！所有消息发送成功');
+            } else {
+                showWarning(`群发完成！${successCount} 条成功，${failCount} 条失败`);
+            }
+        } else {
+            document.getElementById('progress-text').textContent = '发送失败: ' + data.message;
+            document.getElementById('close-progress-btn').disabled = false;
+            showError('群发失败: ' + data.message);
+        }
+    })
+    .catch(error => {
+        document.getElementById('progress-text').textContent = '网络错误: ' + error.message;
+        document.getElementById('close-progress-btn').disabled = false;
+        showError('网络错误: ' + error.message);
+    });
+}
+
+function editRemark(type, index) {
+    const item = type === 'group' ? groupIds[index] : userIds[index];
+    const currentRemark = item.remark || '';
+
+    const newRemark = prompt(`编辑备注\n\nID: ${item.chat_id}\n\n请输入备注:`, currentRemark);
+
+    if (newRemark === null) {
+        return;
+    }
+
+    fetch(API('save_remark'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            chat_type: type,
+            chat_id: item.chat_id,
+            remark: newRemark.trim()
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            item.remark = newRemark.trim();
+
+            if (type === 'group') {
+                renderGroupList();
+            } else {
+                renderUserList();
+            }
+
+            showSuccess(newRemark.trim() ? '备注已保存' : '备注已清除');
+        } else {
+            showError('保存备注失败: ' + data.message);
+        }
+    })
+    .catch(error => {
+        showError('网络错误: ' + error.message);
+    });
+}
+
+function showSuccess(message) { alert(message); }
+function showError(message) { alert(message); }
+function showWarning(message) { alert(message); }
+function showLoading() {}
+
+updateSendMethodUI();
+</script>
+</body>
+</html>
