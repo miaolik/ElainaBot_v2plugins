@@ -36,6 +36,32 @@ __plugin_meta__ = {
 
 log = get_logger(PLUGIN, '自定义API')
 
+try:
+    import brotli  # noqa: F401
+    _HAS_BROTLI = True
+except ImportError:
+    try:
+        import brotlicffi  # noqa: F401
+        _HAS_BROTLI = True
+    except ImportError:
+        _HAS_BROTLI = False
+
+
+def _sanitize_accept_encoding(headers):
+    """无 brotli 库时, 从 Accept-Encoding 中剔除 br, 否则服务器返回的 brotli 响应
+    会被 requests 解码失败, 导致 response.json()/text 抛 JSONDecodeError。"""
+    if _HAS_BROTLI:
+        return headers
+    for key in list(headers):
+        if key.lower() == 'accept-encoding':
+            encodings = [e.strip() for e in str(headers[key]).split(',')]
+            encodings = [e for e in encodings if e and e.split(';')[0].strip().lower() != 'br']
+            if encodings:
+                headers[key] = ', '.join(encodings)
+            else:
+                del headers[key]
+    return headers
+
 _PLUGIN_DIR = os.path.dirname(__file__)
 _PAGE_FILE = os.path.join(_PLUGIN_DIR, 'page.html')
 _DATA_DIR = os.path.join(_PLUGIN_DIR, 'data', 'custom_api')
@@ -128,8 +154,8 @@ def _call_api(api_config, event, regex_groups=()):
         params = {k: _replace_variables(str(v), event, regex_groups) for k, v in params.items()}
         body = {k: _replace_variables(str(v), event, regex_groups) for k, v in body.items()}
 
-        if not headers:
-            headers = dict(_DEFAULT_HEADERS)
+        headers = dict(_DEFAULT_HEADERS) if not headers else dict(headers)
+        headers = _sanitize_accept_encoding(headers)
 
         if method == 'GET':
             response = requests.get(url, headers=headers, params=params, timeout=timeout, allow_redirects=True)
